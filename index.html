@@ -53,13 +53,18 @@
     .stat b{display:block;font-size:24px}
     .mic{white-space:nowrap}
     .taparea{cursor:pointer}
+    .roundDone{min-height:330px;padding:28px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+    .roundDone .big{font-size:42px;font-weight:900}
+    .roundDone .emoji{font-size:62px}
+    .roundDone .hint{max-width:340px}
+
   </style>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 7 · Neues iPhone-Icon</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 8 · Lernrunde</div>
   </header>
 
   <main>
@@ -94,6 +99,13 @@
             <button id="knownBtn" class="good">✓ Weiter</button>
           </div>
         </div>
+      </div>
+
+      <div id="roundDone" class="card roundDone taparea hidden" role="button" tabindex="0" aria-label="Lernrunde abschliessen und neue Runde starten">
+        <div class="emoji">🎉</div>
+        <div class="big">Toll gemacht!</div>
+        <div class="hint">Du hast alle Karten dieser Lernrunde korrekt gelöst und keine Karte mehr zum Repetieren markiert.</div>
+        <div class="hint"><b>Tippe hier</b>, um die Meldung zu schliessen und eine neue Lernrunde zu starten.</div>
       </div>
     </section>
 
@@ -147,7 +159,7 @@ const seed = {
   attempts:0, correct:0
 };
 let db = JSON.parse(localStorage.getItem(KEY) || 'null') || seed;
-let queue=[], current=null, checked=false, revealed=false;
+let queue=[], current=null, checked=false, revealed=false, currentWasCorrect=false, roundActive=false;
 
 const dictionary = {
   'hallo':'bonjour','guten tag':'bonjour','danke':'merci','bitte':'s’il vous plaît',
@@ -181,31 +193,70 @@ function fillSelects(){
 }
 function filteredCards(){
   const g=learnGroup.value;
-  let arr=db.cards.filter(c=>g==='Alle Gruppen'||c.group===g);
-  const reps=arr.filter(c=>c.repeat), normal=arr.filter(c=>!c.repeat);
-  return [...reps,...normal];
+  return db.cards.filter(c=>g==='Alle Gruppen'||c.group===g);
 }
-function newQueue(shuffle=false){
-  queue=filteredCards().slice();
+
+function beginRound(shuffle=false){
+  const cards=filteredCards().slice();
+
+  // Zu Beginn einer neuen Runde werden alle Karten der gewählten Gruppe abgefragt.
+  // Frühere repeat-Markierungen bleiben bestehen, haben aber nur Einfluss innerhalb
+  // der laufenden Runde, wenn die Karte erneut markiert wird.
+  queue=cards.slice();
   if(shuffle) queue.sort(()=>Math.random()-.5);
+
+  roundActive=true;
+  roundDone.classList.add('hidden');
+  flashCard.classList.remove('hidden');
   nextCard();
 }
+
+function finishRound(){
+  roundActive=false;
+  current=null;
+  checked=false;
+  revealed=false;
+  flashCard.classList.add('hidden');
+  roundDone.classList.remove('hidden');
+  updateStats();
+}
+
 function nextCard(){
   flashCard.classList.remove('correct','wrong');
-  checked=false; revealed=false;
-  answerWrap.classList.remove('hidden'); solutionWrap.classList.add('hidden');
-  answerInput.value=''; resultText.textContent='';
-  if(!queue.length) queue=filteredCards().slice();
+  checked=false;
+  revealed=false;
+  currentWasCorrect=false;
+  answerWrap.classList.remove('hidden');
+  solutionWrap.classList.add('hidden');
+  answerInput.value='';
+  resultText.textContent='';
+
+  if(!queue.length){
+    finishRound();
+    return;
+  }
+
   current=queue.shift();
-  if(!current){ germanWord.textContent='Noch keine Karte'; groupTag.textContent='Keine Gruppe'; answerWrap.classList.add('hidden'); return; }
-  germanWord.textContent=current.de; groupTag.textContent=current.group;
-  answerInput.focus();
+  germanWord.textContent=current.de;
+  groupTag.textContent=current.group;
+  setTimeout(()=>answerInput.focus(),0);
 }
+
 function checkAnswer(){
   if(!current||checked) return;
-  checked=true; db.attempts++;
+  checked=true;
+  db.attempts++;
+
   const ok=norm(answerInput.value)===norm(current.fr);
-  if(ok) db.correct++;
+  currentWasCorrect=ok;
+
+  if(ok){
+    db.correct++;
+  }else{
+    // Falsch gelöste Karten müssen in derselben Runde nochmals kommen.
+    current.repeat=true;
+  }
+
   flashCard.classList.add(ok?'correct':'wrong');
   resultText.dataset.ok=ok?'1':'0';
   save();
@@ -215,7 +266,7 @@ function reveal(){
   revealed=true;
   frenchSolution.textContent=current.fr;
   const ok=resultText.dataset.ok==='1';
-  resultText.textContent=ok?'Richtig – sehr gut!':'Nicht ganz. Merke dir die Lösung.';
+  resultText.textContent=ok?'Richtig – sehr gut!':'Nicht ganz. Diese Karte kommt in dieser Runde nochmals.';
   answerWrap.classList.add('hidden'); solutionWrap.classList.remove('hidden');
 }
 checkBtn.onclick=(e)=>{e.stopPropagation();checkAnswer()}
@@ -224,8 +275,31 @@ flashCard.onclick=(e)=>{
   reveal();
 };
 answerInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();checkAnswer();}})
-repeatBtn.onclick=(e)=>{e.stopPropagation();current.repeat=true;save();nextCard()}
-knownBtn.onclick=(e)=>{e.stopPropagation();current.repeat=false;save();nextCard()}
+repeatBtn.onclick=(e)=>{
+  e.stopPropagation();
+  if(!current) return;
+  current.repeat=true;
+  // Markierte Karte kommt am Ende der aktuellen Runde nochmals.
+  queue.push(current);
+  save();
+  nextCard();
+}
+knownBtn.onclick=(e)=>{
+  e.stopPropagation();
+  if(!current) return;
+
+  if(currentWasCorrect){
+    // Richtig + nicht repetieren: Karte ist für diese Runde erledigt.
+    current.repeat=false;
+  }else{
+    // Eine falsche Karte bleibt offen und kommt nochmals.
+    current.repeat=true;
+    queue.push(current);
+  }
+
+  save();
+  nextCard();
+}
 
 function speakFrench(text){
   if(!text) return;
@@ -249,8 +323,16 @@ frenchSolution.onclick=(e)=>{
   e.stopPropagation();
   if(current) speakFrench(current.fr);
 };
-shuffleBtn.onclick=()=>newQueue(true);
-learnGroup.onchange=()=>newQueue(false);
+shuffleBtn.onclick=()=>beginRound(true);
+learnGroup.onchange=()=>beginRound(false);
+roundDone.addEventListener('click',()=>beginRound(false));
+roundDone.addEventListener('keydown',e=>{
+  if(e.key==='Enter'||e.key===' '){
+    e.preventDefault();
+    beginRound(false);
+  }
+});
+
 createGroup.onchange=()=>{
   localStorage.setItem('fr-last-create-group', createGroup.value);
 };
@@ -277,12 +359,12 @@ function renderManage(){
     </div>`).join(''):'<div class="small">Noch keine Karten in dieser Gruppe.</div>';
 }
 manageGroup.onchange=renderManage;
-window.deleteCard=id=>{ if(confirm('Karte wirklich löschen?')){db.cards=db.cards.filter(c=>c.id!==id);save();newQueue(false);} }
+window.deleteCard=id=>{ if(confirm('Karte wirklich löschen?')){db.cards=db.cards.filter(c=>c.id!==id);save();beginRound(false);} }
 window.editCard=id=>{
   const c=db.cards.find(x=>x.id===id); if(!c)return;
   const de=prompt('Deutsch:',c.de); if(de===null)return;
   const fr=prompt('Französisch:',c.fr); if(fr===null)return;
-  c.de=de.trim(); c.fr=fr.trim(); save(); newQueue(false);
+  c.de=de.trim(); c.fr=fr.trim(); save(); beginRound(false);
 }
 
 newGroupBtn.onclick=()=>{
@@ -346,7 +428,7 @@ saveCardBtn.onclick=()=>{
   deInput.value='';frInput.value='';translationNote.textContent='Karte gespeichert.';
   save();
   createGroup.value=group;
-  newQueue(false);
+  beginRound(false);
 };
 
 micBtn.onclick=()=>{
@@ -366,7 +448,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 });
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
-refreshAll(); newQueue(false);
+refreshAll(); beginRound(false);
 </script>
 </body>
 </html>

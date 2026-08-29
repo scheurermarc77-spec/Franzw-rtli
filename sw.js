@@ -1,4 +1,4 @@
-const CACHE='fr-cards-v7';
+const CACHE='fr-cards-v8';
 const ASSETS=[
   './',
   './index.html',
