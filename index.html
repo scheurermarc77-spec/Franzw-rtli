@@ -51,6 +51,7 @@
     .sectionTitle{font-size:18px;font-weight:800;margin:4px 0 12px}
     .divider{height:1px;background:var(--line);margin:10px 0}
     .photoBox{border:1px dashed #cbd5e1;border-radius:16px;padding:14px;background:#f8fafc}
+    .buttonLike{display:flex;align-items:center;justify-content:center;min-height:48px;padding:12px 16px;border-radius:14px;background:#eef2f7;color:var(--text);font-weight:800;cursor:pointer;text-align:center}
     .photoPreview{width:100%;max-height:240px;object-fit:contain;border-radius:12px;margin-top:10px;background:white}
     .importList{display:grid;gap:8px;margin-top:10px}
     .importRow{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center}
@@ -75,7 +76,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 11 · Backup</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 12 · Fotoauswahl</div>
   </header>
 
   <main>
@@ -142,8 +143,14 @@
         <div class="divider"></div>
         <div class="sectionTitle">Foto mit Begriffen importieren</div>
         <div class="photoBox stack">
-          <div class="small">Fotografiere oder wähle eine Liste mit deutschen Begriffen. Die App erkennt die Begriffe und erstellt daraus französische Karteikarten.</div>
-          <input id="photoInput" type="file" accept="image/*" capture="environment">
+          <div class="small">Wähle ein Foto bzw. eine Bilddatei aus der Fotomediathek/Dateien-App oder öffne separat die Kamera. Die App erkennt daraus die deutschen Begriffe.</div>
+          <div class="stack">
+            <label for="photoInput" class="buttonLike">🖼️ Foto / Datei auswählen</label>
+            <input id="photoInput" type="file" accept="image/*" style="display:none">
+
+            <label for="cameraInput" class="buttonLike">📷 Kamera öffnen</label>
+            <input id="cameraInput" type="file" accept="image/*" capture="environment" style="display:none">
+          </div>
           <img id="photoPreview" class="photoPreview hidden" alt="Vorschau des ausgewählten Fotos">
           <button id="scanPhotoBtn" type="button">📷 Begriffe erkennen</button>
           <div id="ocrProgressWrap" class="hidden">
@@ -534,18 +541,31 @@ function renderImportList(){
   });
   importArea.classList.toggle('hidden', importedTerms.length===0);
 }
-photoInput.addEventListener('change',()=>{
-  const file=photoInput.files && photoInput.files[0];
-  if(!file){
+let selectedPhotoFile=null;
+
+function setSelectedPhoto(file){
+  selectedPhotoFile=file||null;
+  if(!selectedPhotoFile){
     photoPreview.classList.add('hidden');
+    photoPreview.removeAttribute('src');
     return;
   }
-  photoPreview.src=URL.createObjectURL(file);
+  photoPreview.src=URL.createObjectURL(selectedPhotoFile);
   photoPreview.classList.remove('hidden');
+}
+
+photoInput.addEventListener('change',()=>{
+  setSelectedPhoto(photoInput.files && photoInput.files[0]);
+  if(photoInput.files && photoInput.files[0]) cameraInput.value='';
+});
+
+cameraInput.addEventListener('change',()=>{
+  setSelectedPhoto(cameraInput.files && cameraInput.files[0]);
+  if(cameraInput.files && cameraInput.files[0]) photoInput.value='';
 });
 scanPhotoBtn.addEventListener('click',async()=>{
-  const file=photoInput.files && photoInput.files[0];
-  if(!file){ alert('Bitte zuerst ein Foto auswählen.'); return; }
+  const file=selectedPhotoFile;
+  if(!file){ alert('Bitte zuerst ein Foto oder eine Bilddatei auswählen.'); return; }
   if(!window.Tesseract){ alert('Die Texterkennung konnte nicht geladen werden. Bitte Internetverbindung prüfen.'); return; }
 
   scanPhotoBtn.disabled=true;
@@ -614,6 +634,8 @@ saveAllImportedBtn.addEventListener('click',()=>{
   importedTerms=[];
   renderImportList();
   photoInput.value='';
+  cameraInput.value='';
+  selectedPhotoFile=null;
   photoPreview.classList.add('hidden');
   ocrStatus.textContent=valid.length+' Karteikarten wurden gespeichert.';
   save();
