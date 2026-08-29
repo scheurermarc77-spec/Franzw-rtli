@@ -58,7 +58,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 4 · Online</div>
   </header>
 
   <main>
@@ -279,28 +279,47 @@ newGroupBtn.onclick=()=>{
   save(); createGroup.value=n;
 };
 translateBtn.onclick=async()=>{
-  const raw=deInput.value.trim(), q=norm(raw);
-  if(!raw){translationNote.textContent='Bitte zuerst ein deutsches Wort eingeben.';deInput.focus();return;}
-  translateBtn.disabled=true; translateBtn.textContent='Suche Übersetzung …';
-  translationNote.textContent='Online-Übersetzung wird gesucht.';
+  const raw=deInput.value.trim();
+  if(!raw){
+    translationNote.textContent='Bitte zuerst ein deutsches Wort eingeben.';
+    deInput.focus();
+    return;
+  }
+
+  translateBtn.disabled=true;
+  translateBtn.textContent='Suche online …';
+  translationNote.textContent='Französische Übersetzung wird online gesucht …';
+
   try{
-    const response=await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(raw)+'&langpair=de|fr');
-    if(!response.ok) throw new Error();
+    const url='https://api.mymemory.translated.net/get?q='+
+      encodeURIComponent(raw)+'&langpair=de|fr';
+
+    const response=await fetch(url,{cache:'no-store'});
+    if(!response.ok) throw new Error('HTTP '+response.status);
+
     const data=await response.json();
-    let suggestion=(data?.responseData?.translatedText||'').trim()
-      .replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&');
-    if(!suggestion) throw new Error();
+    let suggestion=(data && data.responseData && data.responseData.translatedText || '').trim();
+
+    suggestion=suggestion
+      .replace(/&#39;/g,"'")
+      .replace(/&quot;/g,'"')
+      .replace(/&amp;/g,'&');
+
+    if(!suggestion || norm(suggestion)===norm(raw)){
+      throw new Error('Keine brauchbare Übersetzung erhalten');
+    }
+
     frInput.value=suggestion;
-    translationNote.textContent='Online-Vorschlag gefunden – du kannst ihn noch ändern.';
+    translationNote.textContent='Online-Vorschlag: '+suggestion+' – du kannst ihn noch ändern.';
+    frInput.focus();
   }catch(err){
-    let value=dictionary[q];
-    if(!value){const stripped=q.replace(/^(der|die|das|ein|eine)\s+/,'');value=dictionary[stripped]||'';}
-    if(value){frInput.value=value;translationNote.textContent='Online-Suche nicht verfügbar – Offline-Vorschlag eingesetzt.';}
-    else{translationNote.textContent='Online-Übersetzung momentan nicht erreichbar.';}
+    translationNote.textContent='Online-Übersetzung konnte nicht geladen werden. Bitte Internetverbindung prüfen und erneut tippen.';
   }finally{
-    translateBtn.disabled=false; translateBtn.textContent='Übersetzung online vorschlagen';
+    translateBtn.disabled=false;
+    translateBtn.textContent='Übersetzung online vorschlagen';
   }
 };
+
 saveCardBtn.onclick=()=>{
   const de=deInput.value.trim(), fr=frInput.value.trim(), group=createGroup.value;
   if(!de||!fr||!group){alert('Bitte Deutsch, Französisch und Gruppe ausfüllen.');return;}

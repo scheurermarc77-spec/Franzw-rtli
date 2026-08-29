@@ -1,0 +1,12 @@
+WICHTIG BEIM UPDATE AUF GITHUB PAGES
+
+1. Alle Dateien aus dieser ZIP in das GitHub-Repository hochladen und die alten ersetzen.
+2. Besonders index.html UND sw.js müssen ersetzt werden.
+3. Warten, bis GitHub Pages den neuen Stand veröffentlicht hat.
+4. In Safari die Seite neu laden.
+5. Oben in der App muss 'Version 4 · Online' stehen.
+6. Erst dann ist sicher, dass die neue Übersetzungsfunktion läuft.
+
+Test:
+Deutsch: Die Königin
+Dann auf 'Übersetzung online vorschlagen' tippen.
