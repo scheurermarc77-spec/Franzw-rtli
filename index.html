@@ -58,7 +58,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 4 · Online</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 5 · Online · français en minuscules</div>
   </header>
 
   <main>
@@ -309,6 +309,7 @@ translateBtn.onclick=async()=>{
       throw new Error('Keine brauchbare Übersetzung erhalten');
     }
 
+    suggestion=suggestion.toLocaleLowerCase('fr-FR');
     frInput.value=suggestion;
     translationNote.textContent='Online-Vorschlag: '+suggestion+' – du kannst ihn noch ändern.';
     frInput.focus();
@@ -321,7 +322,7 @@ translateBtn.onclick=async()=>{
 };
 
 saveCardBtn.onclick=()=>{
-  const de=deInput.value.trim(), fr=frInput.value.trim(), group=createGroup.value;
+  const de=deInput.value.trim(), fr=frInput.value.trim().toLocaleLowerCase('fr-FR'), group=createGroup.value;
   if(!de||!fr||!group){alert('Bitte Deutsch, Französisch und Gruppe ausfüllen.');return;}
   db.cards.push({id:crypto.randomUUID(),de,fr,group,repeat:false});
   deInput.value='';frInput.value='';translationNote.textContent='Karte gespeichert.';

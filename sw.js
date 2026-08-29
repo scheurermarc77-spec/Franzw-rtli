@@ -1,4 +1,4 @@
-const CACHE='fr-cards-v4';
+const CACHE='fr-cards-v5';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
