@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <title>Français Karten</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
       --bg:#f6f7fb; --card:#fff; --text:#111827; --muted:#6b7280;
@@ -48,6 +49,16 @@
     .itemTop{display:flex;justify-content:space-between;gap:10px;align-items:center}
     .small{font-size:13px;color:var(--muted)} .pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#f3f4f6}
     .sectionTitle{font-size:18px;font-weight:800;margin:4px 0 12px}
+    .divider{height:1px;background:var(--line);margin:10px 0}
+    .photoBox{border:1px dashed #cbd5e1;border-radius:16px;padding:14px;background:#f8fafc}
+    .photoPreview{width:100%;max-height:240px;object-fit:contain;border-radius:12px;margin-top:10px;background:white}
+    .importList{display:grid;gap:8px;margin-top:10px}
+    .importRow{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center}
+    .importRow input{min-width:0}
+    .importRow button{padding:10px 12px}
+    .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}
+    .progress > div{height:100%;width:0%;background:var(--accent);transition:width .2s}
+    @media(max-width:520px){.importRow{grid-template-columns:1fr}.importRow button{width:100%}}
     .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
     .stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;text-align:center}
     .stat b{display:block;font-size:24px}
@@ -64,7 +75,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 9 · Treffer & Runden</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 10 · Fotoimport</div>
   </header>
 
   <main>
@@ -127,6 +138,25 @@
         <input id="frInput" placeholder="z. B. la pomme">
         <div id="translationNote" class="small"></div>
         <button id="saveCardBtn" class="primary">Karte speichern</button>
+
+        <div class="divider"></div>
+        <div class="sectionTitle">Foto mit Begriffen importieren</div>
+        <div class="photoBox stack">
+          <div class="small">Fotografiere oder wähle eine Liste mit deutschen Begriffen. Die App erkennt die Begriffe und erstellt daraus französische Karteikarten.</div>
+          <input id="photoInput" type="file" accept="image/*" capture="environment">
+          <img id="photoPreview" class="photoPreview hidden" alt="Vorschau des ausgewählten Fotos">
+          <button id="scanPhotoBtn" type="button">📷 Begriffe erkennen</button>
+          <div id="ocrProgressWrap" class="hidden">
+            <div class="small" id="ocrStatus">Foto wird gelesen …</div>
+            <div class="progress"><div id="ocrProgress"></div></div>
+          </div>
+          <div id="importArea" class="hidden">
+            <div class="small"><b>Erkannte Begriffe</b> – bitte kontrollieren. Du kannst Deutsch und Französisch vor dem Speichern ändern.</div>
+            <div id="importList" class="importList"></div>
+            <button id="translateAllBtn" type="button">🌐 Alle online übersetzen</button>
+            <button id="saveAllImportedBtn" type="button" class="primary">Alle Karteikarten speichern</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -431,6 +461,156 @@ newGroupBtn.onclick=()=>{
   createGroup.value=n;
   localStorage.setItem('fr-last-create-group', n);
 };
+
+let importedTerms=[];
+
+function cleanOcrLine(line){
+  return line.replace(/^[\s•·▪◦\-–—\d\.\)\(]+/,'').replace(/\s+/g,' ').trim();
+}
+function extractGermanTerms(text){
+  const lines=text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
+  const terms=[];
+  for(let line of lines){
+    const parts=line.includes(';') ? line.split(';') : [line];
+    for(let part of parts){
+      part=cleanOcrLine(part);
+      if(!part || part.length>80) continue;
+      if(/^(seite|page|wortschatz|vocabulaire|vokabular|deutsch|französisch)$/i.test(part)) continue;
+      if(/\s[=:]\s/.test(part)) part=part.split(/\s[=:]\s/)[0].trim();
+      if(part && !terms.some(t=>norm(t)===norm(part))) terms.push(part);
+    }
+  }
+  return terms.slice(0,100);
+}
+async function onlineTranslateGerman(raw){
+  const response=await fetch(
+    'https://api.mymemory.translated.net/get?q='+encodeURIComponent(raw)+'&langpair=de|fr',
+    {cache:'no-store'}
+  );
+  if(!response.ok) throw new Error('HTTP '+response.status);
+  const data=await response.json();
+  let suggestion=(data && data.responseData && data.responseData.translatedText || '').trim();
+  suggestion=suggestion.replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&').toLocaleLowerCase('fr-FR');
+  if(!suggestion || norm(suggestion)===norm(raw)) throw new Error('Keine Übersetzung');
+  return suggestion;
+}
+function renderImportList(){
+  importList.innerHTML='';
+  importedTerms.forEach((item,index)=>{
+    const row=document.createElement('div');
+    row.className='importRow';
+
+    const de=document.createElement('input');
+    de.value=item.de;
+    de.placeholder='Deutsch';
+    de.addEventListener('input',()=>item.de=de.value);
+
+    const fr=document.createElement('input');
+    fr.value=item.fr||'';
+    fr.placeholder='Französisch';
+    fr.addEventListener('input',()=>item.fr=fr.value.toLocaleLowerCase('fr-FR'));
+
+    const del=document.createElement('button');
+    del.type='button';
+    del.textContent='Löschen';
+    del.className='bad';
+    del.addEventListener('click',()=>{
+      importedTerms.splice(index,1);
+      renderImportList();
+    });
+
+    row.append(de,fr,del);
+    importList.appendChild(row);
+  });
+  importArea.classList.toggle('hidden', importedTerms.length===0);
+}
+photoInput.addEventListener('change',()=>{
+  const file=photoInput.files && photoInput.files[0];
+  if(!file){
+    photoPreview.classList.add('hidden');
+    return;
+  }
+  photoPreview.src=URL.createObjectURL(file);
+  photoPreview.classList.remove('hidden');
+});
+scanPhotoBtn.addEventListener('click',async()=>{
+  const file=photoInput.files && photoInput.files[0];
+  if(!file){ alert('Bitte zuerst ein Foto auswählen.'); return; }
+  if(!window.Tesseract){ alert('Die Texterkennung konnte nicht geladen werden. Bitte Internetverbindung prüfen.'); return; }
+
+  scanPhotoBtn.disabled=true;
+  ocrProgressWrap.classList.remove('hidden');
+  ocrStatus.textContent='Foto wird gelesen …';
+  ocrProgress.style.width='0%';
+
+  try{
+    const result=await Tesseract.recognize(file,'deu',{
+      logger:m=>{
+        if(typeof m.progress==='number') ocrProgress.style.width=Math.round(m.progress*100)+'%';
+        if(m.status==='recognizing text') ocrStatus.textContent='Begriffe werden erkannt …';
+      }
+    });
+    const terms=extractGermanTerms(result.data.text||'');
+    if(!terms.length) throw new Error('Keine Begriffe erkannt');
+    importedTerms=terms.map(de=>({de,fr:''}));
+    renderImportList();
+    ocrStatus.textContent=terms.length+' Begriff(e) erkannt.';
+    ocrProgress.style.width='100%';
+  }catch(err){
+    ocrStatus.textContent='Keine Begriffe erkannt. Bitte ein schärferes Foto versuchen.';
+  }finally{
+    scanPhotoBtn.disabled=false;
+  }
+});
+translateAllBtn.addEventListener('click',async()=>{
+  if(!importedTerms.length) return;
+  translateAllBtn.disabled=true;
+  saveAllImportedBtn.disabled=true;
+  ocrProgressWrap.classList.remove('hidden');
+
+  for(let i=0;i<importedTerms.length;i++){
+    const item=importedTerms[i];
+    if(!item.de.trim()) continue;
+    ocrStatus.textContent=`Übersetze ${i+1} von ${importedTerms.length} …`;
+    ocrProgress.style.width=Math.round((i/importedTerms.length)*100)+'%';
+    try{ item.fr=await onlineTranslateGerman(item.de.trim()); }
+    catch(err){ item.fr=item.fr||''; }
+    renderImportList();
+  }
+
+  ocrProgress.style.width='100%';
+  ocrStatus.textContent='Übersetzungen fertig – bitte kontrollieren.';
+  translateAllBtn.disabled=false;
+  saveAllImportedBtn.disabled=false;
+});
+saveAllImportedBtn.addEventListener('click',()=>{
+  const group=createGroup.value;
+  if(!group){ alert('Bitte zuerst eine Gruppe auswählen.'); return; }
+
+  const valid=importedTerms
+    .map(item=>({de:item.de.trim(),fr:(item.fr||'').trim().toLocaleLowerCase('fr-FR')}))
+    .filter(item=>item.de && item.fr);
+
+  if(!valid.length){
+    alert('Es gibt noch keine vollständigen Karten mit deutscher und französischer Angabe.');
+    return;
+  }
+
+  valid.forEach(item=>{
+    db.cards.push({id:crypto.randomUUID(),de:item.de,fr:item.fr,group,repeat:false});
+  });
+
+  localStorage.setItem('fr-last-create-group',group);
+  importedTerms=[];
+  renderImportList();
+  photoInput.value='';
+  photoPreview.classList.add('hidden');
+  ocrStatus.textContent=valid.length+' Karteikarten wurden gespeichert.';
+  save();
+  createGroup.value=group;
+  beginRound(false);
+});
+
 translateBtn.onclick=async()=>{
   const raw=deInput.value.trim();
   if(!raw){
@@ -438,37 +618,16 @@ translateBtn.onclick=async()=>{
     deInput.focus();
     return;
   }
-
   translateBtn.disabled=true;
   translateBtn.textContent='Suche online …';
   translationNote.textContent='Französische Übersetzung wird online gesucht …';
-
   try{
-    const url='https://api.mymemory.translated.net/get?q='+
-      encodeURIComponent(raw)+'&langpair=de|fr';
-
-    const response=await fetch(url,{cache:'no-store'});
-    if(!response.ok) throw new Error('HTTP '+response.status);
-
-    const data=await response.json();
-    let suggestion=(data && data.responseData && data.responseData.translatedText || '').trim();
-
-    suggestion=suggestion
-      .replace(/&#39;/g,"'")
-      .replace(/&quot;/g,'"')
-      .replace(/&amp;/g,'&');
-
-    suggestion=suggestion.toLocaleLowerCase('fr-FR');
-
-    if(!suggestion || norm(suggestion)===norm(raw)){
-      throw new Error('Keine brauchbare Übersetzung erhalten');
-    }
-
+    const suggestion=await onlineTranslateGerman(raw);
     frInput.value=suggestion;
     translationNote.textContent='Online-Vorschlag: '+suggestion+' – du kannst ihn noch ändern.';
     frInput.focus();
   }catch(err){
-    translationNote.textContent='Online-Übersetzung konnte nicht geladen werden. Bitte Internetverbindung prüfen und erneut tippen.';
+    translationNote.textContent='Online-Übersetzung konnte nicht geladen werden. Bitte Internetverbindung prüfen.';
   }finally{
     translateBtn.disabled=false;
     translateBtn.textContent='Übersetzung online vorschlagen';
