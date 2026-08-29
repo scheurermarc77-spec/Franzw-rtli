@@ -76,7 +76,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 12 · Fotoauswahl</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 14 · DeepL verbunden</div>
   </header>
 
   <main>
@@ -172,6 +172,21 @@
         <div class="sectionTitle">Gruppen & Karten</div>
         <select id="manageGroup"></select>
         <div class="card stack">
+        <div class="sectionTitle">Bessere Übersetzung mit DeepL</div>
+        <div class="small">
+          Trage hier einmal die Adresse deines geschützten Übersetzungsservers ein.
+          Der DeepL-API-Schlüssel bleibt dadurch unsichtbar und wird nicht in dieser App gespeichert.
+        </div>
+        <label class="small" for="translationServerUrl"><b>Übersetzungsserver</b></label>
+        <input id="translationServerUrl" type="url" inputmode="url" placeholder="https://francais-karten-deepl.marcscheurer.workers.dev">
+        <div class="row">
+          <button id="saveTranslationServerBtn" type="button">Server speichern</button>
+          <button id="testTranslationServerBtn" type="button">Verbindung testen</button>
+        </div>
+        <div id="translationServerStatus" class="small"></div>
+      </div>
+
+      <div class="card stack">
         <div class="sectionTitle">Sicherung</div>
         <div class="small">Sichere alle Gruppen, Karteikarten und Lernstände als Datei oder stelle sie später wieder her.</div>
         <button id="exportBackupBtn" type="button">⬇️ Sicherung exportieren</button>
@@ -500,6 +515,33 @@ function extractGermanTerms(text){
   return terms.slice(0,100);
 }
 async function onlineTranslateGerman(raw){
+  const proxy=(localStorage.getItem('fr-translation-server')||'https://francais-karten-deepl.marcscheurer.workers.dev').trim().replace(/\/+$/,'');
+
+  if(proxy){
+    const response=await fetch(proxy,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:raw})
+    });
+
+    if(!response.ok){
+      let message='DeepL-Serverfehler';
+      try{
+        const err=await response.json();
+        if(err && err.error) message=err.error;
+      }catch(_){}
+      throw new Error(message);
+    }
+
+    const data=await response.json();
+    let suggestion=(data.translation||'').trim().toLocaleLowerCase('fr-FR');
+    if(!suggestion || norm(suggestion)===norm(raw)){
+      throw new Error('Keine brauchbare DeepL-Übersetzung');
+    }
+    return suggestion;
+  }
+
+  // Fallback, solange noch kein eigener DeepL-Server eingerichtet ist.
   const response=await fetch(
     'https://api.mymemory.translated.net/get?q='+encodeURIComponent(raw)+'&langpair=de|fr',
     {cache:'no-store'}
@@ -507,7 +549,11 @@ async function onlineTranslateGerman(raw){
   if(!response.ok) throw new Error('HTTP '+response.status);
   const data=await response.json();
   let suggestion=(data && data.responseData && data.responseData.translatedText || '').trim();
-  suggestion=suggestion.replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&').toLocaleLowerCase('fr-FR');
+  suggestion=suggestion
+    .replace(/&#39;/g,"'")
+    .replace(/&quot;/g,'"')
+    .replace(/&amp;/g,'&')
+    .toLocaleLowerCase('fr-FR');
   if(!suggestion || norm(suggestion)===norm(raw)) throw new Error('Keine Übersetzung');
   return suggestion;
 }
@@ -694,6 +740,50 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 });
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+
+const savedTranslationServer=(localStorage.getItem('fr-translation-server')||'https://francais-karten-deepl.marcscheurer.workers.dev').trim();
+translationServerUrl.value=savedTranslationServer;
+
+saveTranslationServerBtn.addEventListener('click',()=>{
+  const value=translationServerUrl.value.trim().replace(/\/+$/,'');
+  if(!value){
+    localStorage.removeItem('fr-translation-server');
+    translationServerUrl.value='https://francais-karten-deepl.marcscheurer.workers.dev';
+    translationServerStatus.textContent='Standard-DeepL-Server wiederhergestellt.';
+    return;
+  }
+  if(!/^https:\/\//i.test(value)){
+    translationServerStatus.textContent='Bitte eine Adresse eingeben, die mit https:// beginnt.';
+    return;
+  }
+  localStorage.setItem('fr-translation-server',value);
+  translationServerStatus.textContent='Übersetzungsserver gespeichert.';
+});
+
+testTranslationServerBtn.addEventListener('click',async()=>{
+  const value=translationServerUrl.value.trim().replace(/\/+$/,'');
+  if(!value){
+    translationServerStatus.textContent='Bitte zuerst die Server-Adresse eintragen.';
+    return;
+  }
+  testTranslationServerBtn.disabled=true;
+  translationServerStatus.textContent='Verbindung wird geprüft …';
+  try{
+    const response=await fetch(value,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:'Gras'})
+    });
+    const data=await response.json();
+    if(!response.ok || !data.translation) throw new Error(data.error||'Server nicht bereit');
+    translationServerStatus.textContent='✅ Verbindung funktioniert. DeepL: Gras → '+data.translation;
+  }catch(err){
+    translationServerStatus.textContent='❌ Verbindung nicht möglich: '+(err.message||'Unbekannter Fehler');
+  }finally{
+    testTranslationServerBtn.disabled=false;
+  }
+});
 
 exportBackupBtn.addEventListener('click',()=>{
   try{
