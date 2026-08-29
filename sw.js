@@ -1,12 +1,16 @@
-const CACHE='fr-cards-v6';
+const CACHE='fr-cards-v7';
+const ASSETS=[
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './icons/apple-touch-icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
+];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE).then(cache =>
-      cache.addAll(['./index.html','./manifest.webmanifest','./icon.svg'])
-    )
-  );
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
 
 self.addEventListener('activate', event => {
@@ -30,7 +34,6 @@ self.addEventListener('fetch', event => {
     );
     return;
   }
-
   event.respondWith(
     fetch(event.request)
       .then(response => {
