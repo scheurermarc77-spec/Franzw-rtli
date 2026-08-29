@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>Français Karten</title>
+  <style>
+    :root {
+      --bg:#f6f7fb; --card:#fff; --text:#111827; --muted:#6b7280;
+      --accent:#2563eb; --green:#16a34a; --red:#dc2626; --line:#e5e7eb;
+      --shadow:0 12px 30px rgba(17,24,39,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)}
+    .app{max-width:720px;margin:0 auto;min-height:100vh;padding:env(safe-area-inset-top) 16px calc(86px + env(safe-area-inset-bottom))}
+    header{padding:18px 4px 10px}
+    h1{font-size:28px;margin:0 0 4px} .sub{color:var(--muted);font-size:14px}
+    .panel,.card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
+    .panel{padding:16px;margin:10px 0}
+    .flash{min-height:330px;padding:24px;display:flex;flex-direction:column;justify-content:center;align-items:stretch;text-align:center;transition:.2s;border:3px solid transparent}
+    .flash.correct{border-color:var(--green)} .flash.wrong{border-color:var(--red)}
+    .tag{display:inline-flex;align-self:center;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:700;margin-bottom:16px}
+    .word{font-size:36px;font-weight:800;line-height:1.1;margin:10px 0 22px}
+    .solution{font-size:30px;font-weight:750;margin:12px 0 6px}
+    .speakSolution{background:transparent;padding:10px 14px;color:var(--text);width:auto;align-self:center;cursor:pointer}
+    .speakSolution:active{background:#f3f4f6}
+    .hint{color:var(--muted);font-size:14px}
+    input,select,button,textarea{font:inherit}
+    input,select,textarea{width:100%;padding:14px 15px;border:1px solid #d1d5db;border-radius:14px;background:#fff;font-size:17px;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+    button{border:0;border-radius:14px;padding:13px 16px;font-weight:700;background:#eef2f7;color:#111827}
+    button.primary{background:var(--accent);color:#fff}
+    button.good{background:#dcfce7;color:#166534}
+    button.bad{background:#fee2e2;color:#991b1b}
+    button.ghost{background:transparent;border:1px solid var(--line)}
+    button:active{transform:scale(.99)}
+    .row{display:flex;gap:10px}.row>*{flex:1}
+    .stack{display:grid;gap:11px}
+    .hidden{display:none!important}
+    nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(18px);border-top:1px solid var(--line);padding:8px 14px calc(8px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:20}
+    nav button{flex:1;padding:10px 6px;font-size:12px;background:transparent;color:var(--muted)}
+    nav button.active{color:var(--accent);background:#eff6ff}
+    .list{display:grid;gap:10px}.item{padding:14px;border:1px solid var(--line);border-radius:16px;background:#fff}
+    .itemTop{display:flex;justify-content:space-between;gap:10px;align-items:center}
+    .small{font-size:13px;color:var(--muted)} .pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#f3f4f6}
+    .sectionTitle{font-size:18px;font-weight:800;margin:4px 0 12px}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;text-align:center}
+    .stat b{display:block;font-size:24px}
+    .mic{white-space:nowrap}
+    .taparea{cursor:pointer}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Français Karten 🇫🇷</h1>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div>
+  </header>
+
+  <main>
+    <section id="learnView">
+      <div class="panel stack">
+        <div class="row">
+          <select id="learnGroup"></select>
+          <button id="shuffleBtn">Mischen</button>
+        </div>
+        <div class="stats">
+          <div class="stat"><b id="statTotal">0</b><span class="small">Karten</span></div>
+          <div class="stat"><b id="statRepeat">0</b><span class="small">Repetition</span></div>
+          <div class="stat"><b id="statScore">0%</b><span class="small">Treffer</span></div>
+        </div>
+      </div>
+
+      <div id="flashCard" class="card flash taparea">
+        <div id="groupTag" class="tag">Gruppe</div>
+        <div id="germanWord" class="word">Noch keine Karte</div>
+        <div id="answerWrap" class="stack">
+          <input id="answerInput" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Französisches Wort eingeben">
+          <button id="checkBtn" class="primary">Antwort prüfen</button>
+          <div class="hint">Nach dem Prüfen auf die Karte tippen, um die Lösung zu sehen.</div>
+        </div>
+        <div id="solutionWrap" class="hidden">
+          <div class="small">Lösung</div>
+          <button id="frenchSolution" class="solution speakSolution" type="button" aria-label="Französische Lösung vorlesen"></button>
+          <div class="hint">🔊 Tippe auf das französische Wort, um es anzuhören.</div>
+          <div id="resultText" class="hint"></div>
+          <div class="row" style="margin-top:18px">
+            <button id="repeatBtn" class="bad">↻ Repetieren</button>
+            <button id="knownBtn" class="good">✓ Weiter</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="createView" class="hidden">
+      <div class="panel stack">
+        <div class="sectionTitle">Neue Karte erstellen</div>
+        <label class="small">Gruppe</label>
+        <div class="row">
+          <select id="createGroup"></select>
+          <button id="newGroupBtn">+ Gruppe</button>
+        </div>
+        <label class="small">Deutsch</label>
+        <div class="row">
+          <input id="deInput" placeholder="z. B. der Apfel">
+          <button id="micBtn" class="mic">🎙️</button>
+        </div>
+        <button id="translateBtn">Übersetzung vorschlagen</button>
+        <label class="small">Französisch</label>
+        <input id="frInput" placeholder="z. B. la pomme">
+        <div id="translationNote" class="small"></div>
+        <button id="saveCardBtn" class="primary">Karte speichern</button>
+      </div>
+    </section>
+
+    <section id="manageView" class="hidden">
+      <div class="panel stack">
+        <div class="sectionTitle">Gruppen & Karten</div>
+        <select id="manageGroup"></select>
+        <div id="cardList" class="list"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav>
+  <button data-view="learnView" class="active">📚<br>Lernen</button>
+  <button data-view="createView">➕<br>Erstellen</button>
+  <button data-view="manageView">🗂️<br>Verwalten</button>
+</nav>
+
+<script>
+const KEY='fr-card-app-v1';
+const seed = {
+  groups:['Etappe 1','Früchte'],
+  cards:[
+    {id:crypto.randomUUID(),de:'Guten Tag',fr:'Bonjour',group:'Etappe 1',repeat:false},
+    {id:crypto.randomUUID(),de:'Danke',fr:'Merci',group:'Etappe 1',repeat:false},
+    {id:crypto.randomUUID(),de:'der Apfel',fr:'la pomme',group:'Früchte',repeat:false},
+    {id:crypto.randomUUID(),de:'die Erdbeere',fr:'la fraise',group:'Früchte',repeat:false},
+  ],
+  attempts:0, correct:0
+};
+let db = JSON.parse(localStorage.getItem(KEY) || 'null') || seed;
+let queue=[], current=null, checked=false, revealed=false;
+
+const dictionary = {
+  'hallo':'bonjour','guten tag':'bonjour','danke':'merci','bitte':'s’il vous plaît',
+  'ja':'oui','nein':'non','apfel':'la pomme','der apfel':'la pomme','banane':'la banane',
+  'erdbeere':'la fraise','die erdbeere':'la fraise','orange':'l’orange','birne':'la poire',
+  'traube':'le raisin','wasser':'l’eau','brot':'le pain','haus':'la maison','schule':'l’école',
+  'buch':'le livre','hund':'le chien','katze':'le chat','freund':'l’ami','freundin':'l’amie',
+  'essen':'manger','trinken':'boire','gehen':'aller','kommen':'venir','machen':'faire',
+  'sehen':'voir','sprechen':'parler','lernen':'apprendre','heute':'aujourd’hui','morgen':'demain'
+};
+
+function save(){ localStorage.setItem(KEY,JSON.stringify(db)); refreshAll(); }
+function norm(s){return s.toLowerCase().trim().replace(/[’']/g,"'").replace(/\s+/g,' ')}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function refreshAll(){ fillSelects(); renderManage(); updateStats(); }
+function fillSelects(){
+  const opts=['Alle Gruppen',...db.groups].map(x=>`<option>${esc(x)}</option>`).join('');
+  learnGroup.innerHTML=opts;
+  const go=db.groups.map(x=>`<option>${esc(x)}</option>`).join('');
+  createGroup.innerHTML=go; manageGroup.innerHTML=go;
+}
+function filteredCards(){
+  const g=learnGroup.value;
+  let arr=db.cards.filter(c=>g==='Alle Gruppen'||c.group===g);
+  const reps=arr.filter(c=>c.repeat), normal=arr.filter(c=>!c.repeat);
+  return [...reps,...normal];
+}
+function newQueue(shuffle=false){
+  queue=filteredCards().slice();
+  if(shuffle) queue.sort(()=>Math.random()-.5);
+  nextCard();
+}
+function nextCard(){
+  flashCard.classList.remove('correct','wrong');
+  checked=false; revealed=false;
+  answerWrap.classList.remove('hidden'); solutionWrap.classList.add('hidden');
+  answerInput.value=''; resultText.textContent='';
+  if(!queue.length) queue=filteredCards().slice();
+  current=queue.shift();
+  if(!current){ germanWord.textContent='Noch keine Karte'; groupTag.textContent='Keine Gruppe'; answerWrap.classList.add('hidden'); return; }
+  germanWord.textContent=current.de; groupTag.textContent=current.group;
+  answerInput.focus();
+}
+function checkAnswer(){
+  if(!current||checked) return;
+  checked=true; db.attempts++;
+  const ok=norm(answerInput.value)===norm(current.fr);
+  if(ok) db.correct++;
+  flashCard.classList.add(ok?'correct':'wrong');
+  resultText.dataset.ok=ok?'1':'0';
+  save();
+}
+function reveal(){
+  if(!current||!checked||revealed) return;
+  revealed=true;
+  frenchSolution.textContent=current.fr;
+  const ok=resultText.dataset.ok==='1';
+  resultText.textContent=ok?'Richtig – sehr gut!':'Nicht ganz. Merke dir die Lösung.';
+  answerWrap.classList.add('hidden'); solutionWrap.classList.remove('hidden');
+}
+checkBtn.onclick=(e)=>{e.stopPropagation();checkAnswer()}
+flashCard.onclick=(e)=>{
+  if(e.target.tagName==='BUTTON'||e.target.tagName==='INPUT') return;
+  reveal();
+};
+answerInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();checkAnswer();}})
+repeatBtn.onclick=(e)=>{e.stopPropagation();current.repeat=true;save();nextCard()}
+knownBtn.onclick=(e)=>{e.stopPropagation();current.repeat=false;save();nextCard()}
+
+function speakFrench(text){
+  if(!text) return;
+  if(!('speechSynthesis' in window)){
+    alert('Die Sprachausgabe wird auf diesem Gerät leider nicht unterstützt.');
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'fr-FR';
+  utterance.rate = 0.88;
+  utterance.pitch = 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const frenchVoice = voices.find(v => /^fr[-_]/i.test(v.lang));
+  if(frenchVoice) utterance.voice = frenchVoice;
+
+  window.speechSynthesis.speak(utterance);
+}
+frenchSolution.onclick=(e)=>{
+  e.stopPropagation();
+  if(current) speakFrench(current.fr);
+};
+shuffleBtn.onclick=()=>newQueue(true);
+learnGroup.onchange=()=>newQueue(false);
+
+function updateStats(){
+  const fc=filteredCards();
+  statTotal.textContent=fc.length;
+  statRepeat.textContent=fc.filter(c=>c.repeat).length;
+  statScore.textContent=db.attempts?Math.round(db.correct/db.attempts*100)+'%':'0%';
+}
+function renderManage(){
+  const g=manageGroup.value||db.groups[0];
+  const cards=db.cards.filter(c=>c.group===g);
+  cardList.innerHTML=cards.length?cards.map(c=>`
+    <div class="item">
+      <div class="itemTop">
+        <div><b>${esc(c.de)}</b><div>${esc(c.fr)}</div></div>
+        <span class="pill">${c.repeat?'Repetition':'gelernt'}</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button onclick="editCard('${c.id}')">Bearbeiten</button>
+        <button onclick="deleteCard('${c.id}')" class="bad">Löschen</button>
+      </div>
+    </div>`).join(''):'<div class="small">Noch keine Karten in dieser Gruppe.</div>';
+}
+manageGroup.onchange=renderManage;
+window.deleteCard=id=>{ if(confirm('Karte wirklich löschen?')){db.cards=db.cards.filter(c=>c.id!==id);save();newQueue(false);} }
+window.editCard=id=>{
+  const c=db.cards.find(x=>x.id===id); if(!c)return;
+  const de=prompt('Deutsch:',c.de); if(de===null)return;
+  const fr=prompt('Französisch:',c.fr); if(fr===null)return;
+  c.de=de.trim(); c.fr=fr.trim(); save(); newQueue(false);
+}
+
+newGroupBtn.onclick=()=>{
+  const name=prompt('Name der neuen Gruppe, z. B. Etappe 2:');
+  if(!name||!name.trim())return;
+  const n=name.trim();
+  if(!db.groups.includes(n)) db.groups.push(n);
+  save(); createGroup.value=n;
+};
+translateBtn.onclick=()=>{
+  const q=norm(deInput.value);
+  let value=dictionary[q];
+  if(!value){
+    const stripped=q.replace(/^(der|die|das|ein|eine)\s+/,'');
+    value=dictionary[stripped]||'';
+  }
+  if(value){
+    frInput.value=value; translationNote.textContent='Vorschlag gefunden – du kannst ihn direkt ändern.';
+  } else {
+    translationNote.textContent='Kein sicherer Offline-Vorschlag gefunden. Bitte die französische Übersetzung eingeben oder ergänzen.';
+    frInput.focus();
+  }
+};
+saveCardBtn.onclick=()=>{
+  const de=deInput.value.trim(), fr=frInput.value.trim(), group=createGroup.value;
+  if(!de||!fr||!group){alert('Bitte Deutsch, Französisch und Gruppe ausfüllen.');return;}
+  db.cards.push({id:crypto.randomUUID(),de,fr,group,repeat:false});
+  deInput.value='';frInput.value='';translationNote.textContent='Karte gespeichert.';
+  save(); newQueue(false);
+};
+
+micBtn.onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Spracherkennung wird in diesem Browser nicht unterstützt. Auf dem iPhone kannst du auch die Diktierfunktion der Tastatur verwenden.');return;}
+  const r=new SR(); r.lang='de-CH'; r.interimResults=false; r.maxAlternatives=1;
+  r.onresult=e=>{deInput.value=e.results[0][0].transcript};
+  r.onerror=()=>alert('Spracherkennung konnte nicht gestartet werden.');
+  r.start();
+};
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(b.dataset.view).classList.remove('hidden');
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  if(b.dataset.view==='manageView') renderManage();
+});
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+refreshAll(); newQueue(false);
+</script>
+</body>
+</html>
