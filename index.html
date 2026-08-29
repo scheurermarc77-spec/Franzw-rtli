@@ -58,7 +58,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 5 · Online · français en minuscules</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 6 · Gruppe bleibt ausgewählt</div>
   </header>
 
   <main>
@@ -163,10 +163,20 @@ function norm(s){return s.toLowerCase().trim().replace(/[’']/g,"'").replace(/\
 function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function refreshAll(){ fillSelects(); renderManage(); updateStats(); }
 function fillSelects(){
+  const currentLearn=learnGroup.value;
+  const currentCreate=createGroup.value || localStorage.getItem('fr-last-create-group') || '';
+  const currentManage=manageGroup.value;
+
   const opts=['Alle Gruppen',...db.groups].map(x=>`<option>${esc(x)}</option>`).join('');
   learnGroup.innerHTML=opts;
+
   const go=db.groups.map(x=>`<option>${esc(x)}</option>`).join('');
-  createGroup.innerHTML=go; manageGroup.innerHTML=go;
+  createGroup.innerHTML=go;
+  manageGroup.innerHTML=go;
+
+  if([...learnGroup.options].some(o=>o.value===currentLearn)) learnGroup.value=currentLearn;
+  if([...createGroup.options].some(o=>o.value===currentCreate)) createGroup.value=currentCreate;
+  if([...manageGroup.options].some(o=>o.value===currentManage)) manageGroup.value=currentManage;
 }
 function filteredCards(){
   const g=learnGroup.value;
@@ -240,6 +250,9 @@ frenchSolution.onclick=(e)=>{
 };
 shuffleBtn.onclick=()=>newQueue(true);
 learnGroup.onchange=()=>newQueue(false);
+createGroup.onchange=()=>{
+  localStorage.setItem('fr-last-create-group', createGroup.value);
+};
 
 function updateStats(){
   const fc=filteredCards();
@@ -276,7 +289,9 @@ newGroupBtn.onclick=()=>{
   if(!name||!name.trim())return;
   const n=name.trim();
   if(!db.groups.includes(n)) db.groups.push(n);
-  save(); createGroup.value=n;
+  save();
+  createGroup.value=n;
+  localStorage.setItem('fr-last-create-group', n);
 };
 translateBtn.onclick=async()=>{
   const raw=deInput.value.trim();
@@ -305,11 +320,12 @@ translateBtn.onclick=async()=>{
       .replace(/&quot;/g,'"')
       .replace(/&amp;/g,'&');
 
+    suggestion=suggestion.toLocaleLowerCase('fr-FR');
+
     if(!suggestion || norm(suggestion)===norm(raw)){
       throw new Error('Keine brauchbare Übersetzung erhalten');
     }
 
-    suggestion=suggestion.toLocaleLowerCase('fr-FR');
     frInput.value=suggestion;
     translationNote.textContent='Online-Vorschlag: '+suggestion+' – du kannst ihn noch ändern.';
     frInput.focus();
@@ -325,8 +341,11 @@ saveCardBtn.onclick=()=>{
   const de=deInput.value.trim(), fr=frInput.value.trim().toLocaleLowerCase('fr-FR'), group=createGroup.value;
   if(!de||!fr||!group){alert('Bitte Deutsch, Französisch und Gruppe ausfüllen.');return;}
   db.cards.push({id:crypto.randomUUID(),de,fr,group,repeat:false});
+  localStorage.setItem('fr-last-create-group', group);
   deInput.value='';frInput.value='';translationNote.textContent='Karte gespeichert.';
-  save(); newQueue(false);
+  save();
+  createGroup.value=group;
+  newQueue(false);
 };
 
 micBtn.onclick=()=>{
