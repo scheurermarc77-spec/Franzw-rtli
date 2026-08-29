@@ -64,7 +64,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 8 · Lernrunde</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 9 · Treffer & Runden</div>
   </header>
 
   <main>
@@ -156,10 +156,17 @@ const seed = {
     {id:crypto.randomUUID(),de:'der Apfel',fr:'la pomme',group:'Früchte',repeat:false},
     {id:crypto.randomUUID(),de:'die Erdbeere',fr:'la fraise',group:'Früchte',repeat:false},
   ],
-  attempts:0, correct:0
+  attempts:0, correct:0, completions:{}
 };
 let db = JSON.parse(localStorage.getItem(KEY) || 'null') || seed;
+if(!db.completions) db.completions={};
 let queue=[], current=null, checked=false, revealed=false, currentWasCorrect=false, roundActive=false;
+
+// Trefferanzeige gilt nur für die aktuelle Sitzung/Lerngruppe.
+// Beim Öffnen der App startet sie immer bei 0.
+db.attempts=0;
+db.correct=0;
+localStorage.setItem(KEY,JSON.stringify(db));
 
 const dictionary = {
   'hallo':'bonjour','guten tag':'bonjour','danke':'merci','bitte':'s’il vous plaît',
@@ -180,17 +187,56 @@ function fillSelects(){
   const currentCreate=createGroup.value || localStorage.getItem('fr-last-create-group') || '';
   const currentManage=manageGroup.value;
 
-  const opts=['Alle Gruppen',...db.groups].map(x=>`<option>${esc(x)}</option>`).join('');
-  learnGroup.innerHTML=opts;
+  const learnOptions=[
+    `<option value="Alle Gruppen">Alle Gruppen</option>`,
+    ...db.groups.map(group=>{
+      const count=db.completions[group]||0;
+      return `<option value="${esc(group)}">${esc(group)} · ${count}× geschafft</option>`;
+    })
+  ].join('');
+  learnGroup.innerHTML=learnOptions;
 
-  const go=db.groups.map(x=>`<option>${esc(x)}</option>`).join('');
-  createGroup.innerHTML=go;
-  manageGroup.innerHTML=go;
+  const createOptions=db.groups.map(group=>
+    `<option value="${esc(group)}">${esc(group)}</option>`
+  ).join('');
+  createGroup.innerHTML=createOptions;
+
+  const manageOptions=db.groups.map(group=>{
+    const count=db.completions[group]||0;
+    return `<option value="${esc(group)}">${esc(group)} · ${count}× geschafft</option>`;
+  }).join('');
+  manageGroup.innerHTML=manageOptions;
 
   if([...learnGroup.options].some(o=>o.value===currentLearn)) learnGroup.value=currentLearn;
   if([...createGroup.options].some(o=>o.value===currentCreate)) createGroup.value=currentCreate;
   if([...manageGroup.options].some(o=>o.value===currentManage)) manageGroup.value=currentManage;
 }
+function resetSessionScore(){
+  db.attempts=0;
+  db.correct=0;
+  localStorage.setItem(KEY,JSON.stringify(db));
+  updateStats();
+}
+
+function incrementCompletionCounts(){
+  const selected=learnGroup.value;
+
+  if(selected==='Alle Gruppen'){
+    // Eine komplette Runde über alle Gruppen bedeutet:
+    // Jede enthaltene Gruppe wurde vollständig gelöst.
+    db.groups.forEach(group=>{
+      const hasCards=db.cards.some(c=>c.group===group);
+      if(hasCards){
+        db.completions[group]=(db.completions[group]||0)+1;
+      }
+    });
+  }else if(selected){
+    db.completions[selected]=(db.completions[selected]||0)+1;
+  }
+
+  localStorage.setItem(KEY,JSON.stringify(db));
+}
+
 function filteredCards(){
   const g=learnGroup.value;
   return db.cards.filter(c=>g==='Alle Gruppen'||c.group===g);
@@ -216,9 +262,13 @@ function finishRound(){
   current=null;
   checked=false;
   revealed=false;
+
+  incrementCompletionCounts();
+
   flashCard.classList.add('hidden');
   roundDone.classList.remove('hidden');
   updateStats();
+  renderManage();
 }
 
 function nextCard(){
@@ -324,7 +374,10 @@ frenchSolution.onclick=(e)=>{
   if(current) speakFrench(current.fr);
 };
 shuffleBtn.onclick=()=>beginRound(true);
-learnGroup.onchange=()=>beginRound(false);
+learnGroup.onchange=()=>{
+  resetSessionScore();
+  beginRound(false);
+};
 roundDone.addEventListener('click',()=>beginRound(false));
 roundDone.addEventListener('keydown',e=>{
   if(e.key==='Enter'||e.key===' '){
@@ -346,7 +399,9 @@ function updateStats(){
 function renderManage(){
   const g=manageGroup.value||db.groups[0];
   const cards=db.cards.filter(c=>c.group===g);
-  cardList.innerHTML=cards.length?cards.map(c=>`
+  const completed=db.completions[g]||0;
+  const summary=`<div class="item" style="background:#f8fafc"><b>🏆 ${completed}× Toll gemacht</b><div class="small">Alle Karten dieser Gruppe vollständig gelöst</div></div>`;
+  cardList.innerHTML=summary+(cards.length?cards.map(c=>`
     <div class="item">
       <div class="itemTop">
         <div><b>${esc(c.de)}</b><div>${esc(c.fr)}</div></div>
@@ -356,7 +411,7 @@ function renderManage(){
         <button onclick="editCard('${c.id}')">Bearbeiten</button>
         <button onclick="deleteCard('${c.id}')" class="bad">Löschen</button>
       </div>
-    </div>`).join(''):'<div class="small">Noch keine Karten in dieser Gruppe.</div>';
+    </div>`).join(''):'<div class="small">Noch keine Karten in dieser Gruppe.</div>');
 }
 manageGroup.onchange=renderManage;
 window.deleteCard=id=>{ if(confirm('Karte wirklich löschen?')){db.cards=db.cards.filter(c=>c.id!==id);save();beginRound(false);} }
