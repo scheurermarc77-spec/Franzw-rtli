@@ -76,7 +76,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 15 · automatische Cloud-Sicherung</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 16 · nur Cloud-Sicherung</div>
   </header>
 
   <main>
@@ -908,89 +908,9 @@ cloudRestoreBtn.addEventListener('click',async()=>{
 });
 window.addEventListener('online',()=>scheduleCloudBackup());
 
-exportBackupBtn.addEventListener('click',()=>{
-  try{
-    const backup={
-      app:'Français Karten',
-      version:15,
-      exportedAt:new Date().toISOString(),
-      data:db
-    };
 
-    const blob=new Blob(
-      [JSON.stringify(backup,null,2)],
-      {type:'application/json;charset=utf-8'}
-    );
 
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const now=new Date();
-    const y=now.getFullYear();
-    const m=String(now.getMonth()+1).padStart(2,'0');
-    const d=String(now.getDate()).padStart(2,'0');
 
-    a.href=url;
-    a.download=`francais-karten-sicherung-${y}-${m}-${d}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
-    backupStatus.textContent='Sicherung wurde erstellt.';
-  }catch(err){
-    backupStatus.textContent='Sicherung konnte nicht erstellt werden.';
-  }
-});
-
-importBackupBtn.addEventListener('click',async()=>{
-  const file=importBackupInput.files && importBackupInput.files[0];
-  if(!file){
-    backupStatus.textContent='Bitte zuerst eine Sicherungsdatei auswählen.';
-    return;
-  }
-
-  try{
-    const text=await file.text();
-    const parsed=JSON.parse(text);
-    const incoming=parsed && parsed.data ? parsed.data : parsed;
-
-    if(!incoming || !Array.isArray(incoming.groups) || !Array.isArray(incoming.cards)){
-      throw new Error('Ungültige Sicherung');
-    }
-
-    const ok=confirm(
-      'Bestehende Daten auf diesem Gerät durch die Sicherung ersetzen?'
-    );
-    if(!ok) return;
-
-    db={
-      groups:incoming.groups,
-      cards:incoming.cards,
-      attempts:Number(incoming.attempts)||0,
-      correct:Number(incoming.correct)||0,
-      completions:incoming.completions && typeof incoming.completions==='object'
-        ? incoming.completions
-        : {}
-    };
-
-    localStorage.setItem(KEY,JSON.stringify(db));
-    scheduleCloudBackup();
-
-    const lastGroup=db.groups[0]||'';
-    if(lastGroup){
-      localStorage.setItem('fr-last-create-group',lastGroup);
-    }
-
-    refreshAll();
-    resetSessionScore();
-    beginRound(false);
-
-    backupStatus.textContent='Sicherung wurde erfolgreich importiert.';
-    importBackupInput.value='';
-  }catch(err){
-    backupStatus.textContent='Diese Datei ist keine gültige Sicherung.';
-  }
-});
 
 refreshAll(); beginRound(false);
 setTimeout(()=>{ const last=localStorage.getItem('fr-cloud-last-save'); if(last) setCloudStatus('✅ Letzte Cloud-Sicherung vorhanden'); scheduleCloudBackup(); },1200);
