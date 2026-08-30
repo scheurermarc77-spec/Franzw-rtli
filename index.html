@@ -8,7 +8,58 @@
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <title>Français Karten</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js">
+async function deleteSelectedGroup(){
+  const select = document.getElementById('manageGroup');
+  if(!select) return;
+  const group = select.value;
+  if(!group || group === '__all__' || group === 'all'){
+    alert('Bitte zuerst eine einzelne Gruppe auswählen.');
+    return;
+  }
+
+  const count = db.cards.filter(c => c.group === group).length;
+  const ok = confirm(
+    'Gruppe „' + group + '“ wirklich vollständig löschen?\n\n' +
+    'Dabei werden die Gruppe und alle ' + count + ' Karteikarten dieser Gruppe gelöscht.'
+  );
+  if(!ok) return;
+
+  db.cards = db.cards.filter(c => c.group !== group);
+  db.groups = db.groups.filter(g => g !== group);
+  if(db.completions && Object.prototype.hasOwnProperty.call(db.completions, group)){
+    delete db.completions[group];
+  }
+
+  localStorage.setItem(KEY, JSON.stringify(db));
+
+  // Forget selected create group if it was deleted.
+  if(localStorage.getItem('fr-last-create-group') === group){
+    localStorage.removeItem('fr-last-create-group');
+  }
+
+  // Refresh all selectors/views using the app's existing refresh routine.
+  if(typeof refreshAll === 'function') refreshAll();
+  else if(typeof renderAll === 'function') renderAll();
+  else if(typeof refresh === 'function') refresh();
+
+  if(typeof resetSessionScore === 'function') resetSessionScore();
+  if(typeof beginRound === 'function') beginRound();
+
+  // Trigger the existing automatic cloud backup, whichever name is present.
+  try {
+    if(typeof scheduleCloudBackup === 'function') scheduleCloudBackup();
+    else if(typeof autoCloudBackup === 'function') await autoCloudBackup();
+    else if(typeof saveCloudBackup === 'function') await saveCloudBackup();
+    else if(typeof cloudBackup === 'function') await cloudBackup();
+  } catch(e) {
+    console.warn('Cloud-Sicherung nach Gruppenlöschung:', e);
+  }
+}
+
+document.getElementById('deleteGroupBtn')?.addEventListener('click', deleteSelectedGroup);
+
+</script>
   <style>
     :root {
       --bg:#f6f7fb; --card:#fff; --text:#111827; --muted:#6b7280;
@@ -70,13 +121,19 @@
     .roundDone .emoji{font-size:62px}
     .roundDone .hint{max-width:340px}
 
-  </style>
+  
+.dangerBtn{
+  width:100%; margin-top:12px; padding:15px 16px; border:0; border-radius:18px;
+  background:#fff1f1; color:#c62828; font-weight:800; font-size:17px;
+}
+.dangerBtn:active{transform:scale(.99)}
+</style>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 16 · nur Cloud-Sicherung</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 17 · Gruppen löschen</div>
   </header>
 
   <main>
@@ -171,6 +228,7 @@
       <div class="panel stack">
         <div class="sectionTitle">Gruppen & Karten</div>
         <select id="manageGroup"></select>
+<button id="deleteGroupBtn" class="dangerBtn" type="button">🗑️ Ganze Gruppe löschen</button>
         <div class="card stack">
         <div class="sectionTitle">Bessere Übersetzung mit DeepL</div>
         <div class="small">
