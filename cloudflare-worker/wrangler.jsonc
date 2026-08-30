@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "francais-karten-deepl",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-29",
+  "vars": {
+    "ALLOWED_ORIGIN": "https://DEIN-GITHUB-NAME.github.io"
+  }
+}
