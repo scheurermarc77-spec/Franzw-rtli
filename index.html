@@ -76,7 +76,7 @@
 <div class="app">
   <header>
     <h1>Français Karten 🇫🇷</h1>
-    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 14 · DeepL verbunden</div>
+    <div class="sub">Deutsch sehen · Französisch schreiben · wiederholen</div><div style="font-size:12px;color:#6b7280;margin-top:4px">Version 15 · automatische Cloud-Sicherung</div>
   </header>
 
   <main>
@@ -187,14 +187,27 @@
       </div>
 
       <div class="card stack">
-        <div class="sectionTitle">Sicherung</div>
-        <div class="small">Sichere alle Gruppen, Karteikarten und Lernstände als Datei oder stelle sie später wieder her.</div>
-        <button id="exportBackupBtn" type="button">⬇️ Sicherung exportieren</button>
-        <label class="small"><b>Sicherung importieren</b></label>
-        <input id="importBackupInput" type="file" accept=".json,application/json">
-        <button id="importBackupBtn" type="button">⬆️ Sicherung importieren</button>
-        <div id="backupStatus" class="small"></div>
+        <div class="sectionTitle">☁️ Automatische Sicherung</div>
+        <div class="small">Deine Gruppen, Karteikarten und Lernstände werden automatisch in deiner persönlichen Cloud-Sicherung gespeichert. Jedes iPhone erhält einen eigenen Wiederherstellungscode.</div>
+        <label class="small"><b>Dein Wiederherstellungscode</b></label>
+        <input id="recoveryCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX">
+        <div class="row">
+          <button id="copyRecoveryCodeBtn" type="button">📋 Code kopieren</button>
+          <button id="cloudBackupNowBtn" type="button">☁️ Jetzt sichern</button>
+        </div>
+        <button id="cloudRestoreBtn" type="button">↩️ Mit diesem Code wiederherstellen</button>
+        <div id="cloudBackupStatus" class="small"></div>
+        <div class="small"><b>Wichtig:</b> Bewahre diesen Code auf. Mit ihm kannst du deine Karten auf einem neuen iPhone wiederherstellen.</div>
       </div>
+
+      <details class="card stack">
+        <summary><b>Zusätzliche Dateisicherung</b></summary>
+        <div class="small">Optional kannst du weiterhin eine JSON-Datei exportieren oder importieren.</div>
+        <button id="exportBackupBtn" type="button">⬇️ Sicherungsdatei exportieren</button>
+        <input id="importBackupInput" type="file" accept=".json,application/json">
+        <button id="importBackupBtn" type="button">⬆️ Sicherungsdatei importieren</button>
+        <div id="backupStatus" class="small"></div>
+      </details>
 
       <div id="cardList" class="list"></div>
       </div>
@@ -240,7 +253,62 @@ const dictionary = {
   'sehen':'voir','sprechen':'parler','lernen':'apprendre','heute':'aujourd’hui','morgen':'demain'
 };
 
-function save(){ localStorage.setItem(KEY,JSON.stringify(db)); refreshAll(); }
+const CLOUD_SERVER='https://francais-karten-deepl.marcscheurer.workers.dev';
+const CLOUD_CODE_KEY='fr-cloud-recovery-code-v1';
+let cloudSaveTimer=null;
+let cloudSaving=false;
+let cloudSaveAgain=false;
+
+function generateRecoveryCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes=new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let raw='';
+  for(const b of bytes) raw+=chars[b%chars.length];
+  return raw.match(/.{1,4}/g).join('-');
+}
+function normalizeRecoveryCode(value){
+  return String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16).match(/.{1,4}/g)?.join('-')||'';
+}
+function getRecoveryCode(){
+  let code=normalizeRecoveryCode(localStorage.getItem(CLOUD_CODE_KEY)||'');
+  if(!code){
+    code=generateRecoveryCode();
+    localStorage.setItem(CLOUD_CODE_KEY,code);
+  }
+  return code;
+}
+function setCloudStatus(text){
+  const el=document.getElementById('cloudBackupStatus');
+  if(el) el.textContent=text;
+}
+async function cloudBackup(silent=false){
+  if(cloudSaving){ cloudSaveAgain=true; return; }
+  if(!navigator.onLine){ if(!silent) setCloudStatus('Offline – die Sicherung erfolgt automatisch, sobald du wieder online bist.'); return; }
+  cloudSaving=true;
+  if(!silent) setCloudStatus('☁️ Sicherung läuft …');
+  try{
+    const code=getRecoveryCode();
+    const response=await fetch(CLOUD_SERVER+'/backup',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code,payload:{app:'Français Karten',version:15,data:db}})
+    });
+    const data=await response.json();
+    if(!response.ok) throw new Error(data.error||'Cloud-Sicherung fehlgeschlagen');
+    localStorage.setItem('fr-cloud-last-save',data.updatedAt||new Date().toISOString());
+    setCloudStatus('✅ Automatisch gesichert · '+new Date().toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}));
+  }catch(err){
+    setCloudStatus('⚠️ Cloud-Sicherung momentan nicht möglich. Deine Daten bleiben auf diesem iPhone gespeichert.');
+  }finally{
+    cloudSaving=false;
+    if(cloudSaveAgain){ cloudSaveAgain=false; scheduleCloudBackup(); }
+  }
+}
+function scheduleCloudBackup(){
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(()=>cloudBackup(true),900);
+}
+function save(){ localStorage.setItem(KEY,JSON.stringify(db)); refreshAll(); scheduleCloudBackup(); }
 function norm(s){return s.toLowerCase().trim().replace(/[’']/g,"'").replace(/\s+/g,' ')}
 function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function refreshAll(){ fillSelects(); renderManage(); updateStats(); }
@@ -297,6 +365,7 @@ function incrementCompletionCounts(){
   }
 
   localStorage.setItem(KEY,JSON.stringify(db));
+  scheduleCloudBackup();
 }
 
 function filteredCards(){
@@ -785,11 +854,65 @@ testTranslationServerBtn.addEventListener('click',async()=>{
   }
 });
 
+const recoveryCodeInput=document.getElementById('recoveryCode');
+recoveryCodeInput.value=getRecoveryCode();
+recoveryCodeInput.addEventListener('input',()=>{
+  recoveryCodeInput.value=normalizeRecoveryCode(recoveryCodeInput.value);
+});
+recoveryCodeInput.addEventListener('change',()=>{
+  const code=normalizeRecoveryCode(recoveryCodeInput.value);
+  if(code.replace(/-/g,'').length===16){
+    localStorage.setItem(CLOUD_CODE_KEY,code);
+    recoveryCodeInput.value=code;
+    setCloudStatus('Code übernommen. Tippe auf „wiederherstellen“, um die zugehörige Sicherung zu laden.');
+  }
+});
+copyRecoveryCodeBtn.addEventListener('click',async()=>{
+  const code=getRecoveryCode();
+  recoveryCodeInput.value=code;
+  try{ await navigator.clipboard.writeText(code); setCloudStatus('📋 Wiederherstellungscode kopiert.'); }
+  catch(e){ recoveryCodeInput.select(); setCloudStatus('Code markiert – bitte kopieren.'); }
+});
+cloudBackupNowBtn.addEventListener('click',async()=>{
+  const code=normalizeRecoveryCode(recoveryCodeInput.value);
+  if(code.replace(/-/g,'').length!==16){ setCloudStatus('Bitte einen vollständigen Wiederherstellungscode eingeben.'); return; }
+  localStorage.setItem(CLOUD_CODE_KEY,code);
+  await cloudBackup(false);
+});
+cloudRestoreBtn.addEventListener('click',async()=>{
+  const code=normalizeRecoveryCode(recoveryCodeInput.value);
+  if(code.replace(/-/g,'').length!==16){ setCloudStatus('Bitte einen vollständigen Wiederherstellungscode eingeben.'); return; }
+  setCloudStatus('☁️ Sicherung wird geladen …');
+  try{
+    const response=await fetch(CLOUD_SERVER+'/backup/'+encodeURIComponent(code),{cache:'no-store'});
+    const result=await response.json();
+    if(!response.ok) throw new Error(result.error||'Sicherung nicht gefunden');
+    const incoming=result.payload?.data || result.payload;
+    if(!incoming || !Array.isArray(incoming.groups) || !Array.isArray(incoming.cards)) throw new Error('Ungültige Sicherung');
+    if(!confirm('Die Daten auf diesem iPhone durch die Cloud-Sicherung ersetzen?')){ setCloudStatus('Wiederherstellung abgebrochen.'); return; }
+    db={
+      groups:incoming.groups,
+      cards:incoming.cards,
+      attempts:0,
+      correct:0,
+      completions:incoming.completions && typeof incoming.completions==='object' ? incoming.completions : {}
+    };
+    localStorage.setItem(KEY,JSON.stringify(db));
+    localStorage.setItem(CLOUD_CODE_KEY,code);
+    recoveryCodeInput.value=code;
+    refreshAll(); resetSessionScore(); beginRound(false);
+    setCloudStatus('✅ Cloud-Sicherung erfolgreich wiederhergestellt.');
+  }catch(err){
+    setCloudStatus('❌ '+(err.message||'Cloud-Sicherung konnte nicht geladen werden.'));
+  }
+});
+window.addEventListener('online',()=>scheduleCloudBackup());
+
 exportBackupBtn.addEventListener('click',()=>{
   try{
     const backup={
       app:'Français Karten',
-      version:11,
+      version:15,
       exportedAt:new Date().toISOString(),
       data:db
     };
@@ -851,6 +974,7 @@ importBackupBtn.addEventListener('click',async()=>{
     };
 
     localStorage.setItem(KEY,JSON.stringify(db));
+    scheduleCloudBackup();
 
     const lastGroup=db.groups[0]||'';
     if(lastGroup){
@@ -869,6 +993,7 @@ importBackupBtn.addEventListener('click',async()=>{
 });
 
 refreshAll(); beginRound(false);
+setTimeout(()=>{ const last=localStorage.getItem('fr-cloud-last-save'); if(last) setCloudStatus('✅ Letzte Cloud-Sicherung vorhanden'); scheduleCloudBackup(); },1200);
 </script>
 </body>
 </html>
