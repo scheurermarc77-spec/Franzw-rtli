@@ -378,6 +378,18 @@ function filteredCards(){
 function beginRound(shuffle=false){
   const cards=filteredCards().slice();
 
+  // Keine Erfolgsmeldung anzeigen, wenn noch gar keine Karte bearbeitet wurde.
+  // Das verhindert insbesondere die Meldung "Toll gemacht!" beim Start,
+  // falls in der gewählten Gruppe noch keine Karten vorhanden sind.
+  if(!cards.length){
+    queue=[];
+    current=null;
+    roundActive=false;
+    roundDone.classList.add('hidden');
+    flashCard.classList.add('hidden');
+    return;
+  }
+
   // Zu Beginn einer neuen Runde werden alle Karten der gewählten Gruppe abgefragt.
   // Frühere repeat-Markierungen bleiben bestehen, haben aber nur Einfluss innerhalb
   // der laufenden Runde, wenn die Karte erneut markiert wird.
